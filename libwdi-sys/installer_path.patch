@@ -1,0 +1,20 @@
+diff --git a/libwdi/embedder.h b/libwdi/embedder.h
+index 411c8df..dab436d 100644
+--- a/libwdi/embedder.h
++++ b/libwdi/embedder.h
+@@ -50,11 +50,11 @@
+ #define SOLUTIONDIR ".."
+ #endif
+ #if defined(_DEBUG)
+-#define INSTALLER_PATH_32 SOLUTIONDIR "\\Win32\\Debug\\helper"
+-#define INSTALLER_PATH_64 SOLUTIONDIR "\\x64\\Debug\\helper"
++#define INSTALLER_PATH_32 SOLUTIONDIR "\\libwdi"
++#define INSTALLER_PATH_64 SOLUTIONDIR "\\libwdi"
+ #else
+-#define INSTALLER_PATH_32 SOLUTIONDIR "\\Win32\\Release\\helper"
+-#define INSTALLER_PATH_64 SOLUTIONDIR "\\x64\\Release\\helper"
++#define INSTALLER_PATH_32 SOLUTIONDIR "\\libwdi"
++#define INSTALLER_PATH_64 SOLUTIONDIR "\\libwdi"
+ #endif
+ #else
+ #if !defined(SOLUTIONDIR)
