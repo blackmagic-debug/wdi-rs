@@ -151,7 +151,6 @@ fn make_embedder<P: AsRef<Path>>(out_dir: P, src_dir: P, include_dir: P)
         .file(src_dir.join("embedder.c"));
 
     let output_path = src_dir.join("embedder.exe");
-    dbg!(&output_path);
     let mut command = embedder.get_compiler().to_command();
     command
         .arg("libwdi/libwdi/embedder.c")
@@ -176,6 +175,47 @@ where
         .status().unwrap().exit_ok().unwrap();
 
 }
+
+
+fn run_bindgen<P: AsRef<Path>>(out_dir: P)
+{
+    let out_dir: &Path = out_dir.as_ref();
+
+    // HACK: attempt to find libclang.dll from Visual Studio.
+    let msvc = cc::windows_registry::find_tool("x86_64-pc-windows-msvc", "vcruntime140.dll")
+        .expect("Failed to find MSVC");
+    let msvc_path = msvc.path();
+
+    let clang_dir = msvc_path // cl.exe
+        .parent().unwrap() //  x64
+        .parent().unwrap() // HostX64
+        .parent().unwrap() // bin
+        .parent().unwrap() // <VC Tools version>
+        .parent().unwrap() // MSVC
+        .parent().unwrap() // Tools
+        .join(&["Llvm", "x64", "bin"].into_iter().collect::<PathBuf>());
+    dbg!(clang_dir.join("libclang.dll"));
+    env::set_var("LIBCLANG_PATH", clang_dir.join("libclang.dll"));
+
+    println!("cargo:rerun-if-changed=wrapper.h");
+
+    let bindings = bindgen::Builder::default()
+        .header("wrapper.h")
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .clang_arg("-Ilibwdi/libwdi")
+        .allowlist_function("wdi_.*")
+        .allowlist_var("wdi_.*")
+        .allowlist_type("wdi_.*")
+        .prepend_enum_name(false)
+        .detect_include_paths(true)
+        .generate()
+        .expect("Unable to generate bindings");
+
+    bindings
+        .write_to_file(out_dir.join("bindings.rs"))
+        .expect("Couldn't write bindings");
+}
+
 
 fn main()
 {
@@ -213,11 +253,13 @@ fn main()
         .include(&include_dir)
         .include(&libwdi_repo)
         .files(&libwdi_srcs)
-        .compile("wdi")
-    ;
+        .compile("wdi");
+
+    if cfg!(feature = "dynamic-bindgen") {
+        run_bindgen(&out_dir);
+    }
 
     // libwdi system library dependencies.
     println!("cargo:rustc-link-lib=Shell32");
     println!("cargo:rustc-link-lib=Ole32");
-
 }
