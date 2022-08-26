@@ -558,6 +558,7 @@ pub fn prepare_driver(device: &mut DeviceInfo, path: &str, inf_name: &str, optio
 {
     let mut raw = device.as_raw();
 
+    // FIXME: these should probably just be the arguments.
     let cstr_path = CString::new(path).unwrap();
     let path_ptr = cstr_path.into_raw();
     let cstr_inf_name = CString::new(inf_name).unwrap();
@@ -568,6 +569,83 @@ pub fn prepare_driver(device: &mut DeviceInfo, path: &str, inf_name: &str, optio
 
     drop(unsafe { CString::from_raw(path_ptr) });
     drop(unsafe { CString::from_raw(inf_name_ptr) });
+
+    if let Some(e) = Error::from_error_code(ret) {
+        return Err(e);
+    }
+
+    Ok(())
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct InstallDriverOptions
+{
+    /// Handle to a Window application that should receive a modal progress dialog. When this
+    /// parameter is provided, a modal progress dialog will be displayed for the duration of the
+    /// driver installation process.
+    hwnd: libwdi_sys::HWND,
+
+    /// Install a filter driver instead of the regular driver (libusb-win32 only).
+    install_filter_driver: bool,
+
+    /// Number of milliseconds to wait for any pending installations. 0, means no timeout.
+    pending_install_timeout: u32,
+}
+
+impl Default for InstallDriverOptions
+{
+    fn default() -> Self
+    {
+        Self {
+            hwnd: ptr::null_mut(),
+            install_filter_driver: false,
+            pending_install_timeout: 0,
+        }
+    }
+}
+
+/// Functions for converting betwen this and [libwdi_sys::wdi_options_install_driver].
+impl InstallDriverOptions
+{
+    pub fn as_raw(&mut self) -> libwdi_sys::wdi_options_install_driver
+    {
+        libwdi_sys::wdi_options_install_driver {
+            hWnd: self.hwnd,
+            install_filter_driver: self.install_filter_driver as i32,
+            pending_install_timeout: self.pending_install_timeout,
+        }
+    }
+
+    pub fn from_raw(other: &libwdi_sys::wdi_options_install_driver) -> Self
+    {
+        Self {
+            hwnd: other.hWnd,
+            install_filter_driver: other.install_filter_driver != 0,
+            pending_install_timeout: other.pending_install_timeout,
+        }
+    }
+}
+
+
+/// A Rust interface to [libwdi_sys::wdi_install_driver] ([original_documentation]).
+///
+/// Performs the actual driver installation.
+pub fn install_driver(device: &mut DeviceInfo, path: &str, inf_name: &str, options: &mut InstallDriverOptions) -> Result<(), Error>
+{
+    let mut raw = device.as_raw();
+
+    // FIXME: these should probably just be the arguments.
+    let cstr_path = CString::new(path).unwrap();
+    let path_ptr = cstr_path.into_raw();
+    let cstr_inf_name = CString::new(inf_name).unwrap();
+    let inf_name_ptr = cstr_inf_name.into_raw();
+    let mut opt = options.as_raw() ;
+
+    let ret = unsafe { libwdi_sys::wdi_install_driver(&mut raw, path_ptr, inf_name_ptr, &mut opt) };
+
+    drop(unsafe { CString::from_raw(path_ptr) });
+    drop(unsafe { CString::from_raw(inf_name_ptr)});
 
     if let Some(e) = Error::from_error_code(ret) {
         return Err(e);
