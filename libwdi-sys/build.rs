@@ -3,8 +3,7 @@
 use std::env;
 use std::fs;
 use std::fs::File;
-use std::io::{Write, BufRead, BufReader};
-use std::ffi::OsString;
+use std::io::Write;
 use std::process::Command;
 use std::path::{Path, PathBuf};
 
@@ -58,6 +57,7 @@ fn patch_source<P: AsRef<Path>>(src_dir: P)
 {
     apply_patch_file("installer_path.patch");
     apply_patch_file("winusb_only.patch");
+    apply_patch_file("static_windows_error_str.patch");
 }
 
 
