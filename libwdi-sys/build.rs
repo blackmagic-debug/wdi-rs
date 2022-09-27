@@ -28,14 +28,20 @@ impl<T> IoIgnoreAlreadyExists<std::io::Error> for std::io::Result<T>
     }
 }
 
-fn apply_patch_file<P: AsRef<Path>>(patch_file_path: P)
+fn apply_patch_file<SrcP, PatchP>(src_dir: SrcP, patch_file_path: PatchP)
+where
+    SrcP: AsRef<Path>,
+    PatchP: AsRef<Path>,
 {
+    let src_dir = src_dir.as_ref();
     let patch_file_path: &Path = patch_file_path.as_ref();
     let patch_text = fs::read_to_string(patch_file_path).unwrap();
     let patch = Patch::from_str(&patch_text).unwrap();
 
     // Strip the leading `a/` from the filename, and prepend the path to libwdi's repo.
-    let filename = format!("libwdi/{}", &patch.original().unwrap()[2..]);
+    // src_dir already includes the `libwdi` part, which is also included in the patch files.
+    // So we'll start from src_dir's parent.
+    let filename = src_dir.parent().unwrap().join(&patch.original().unwrap()[2..]);
 
     // Get the file to patch, and patch its text.
     let base_text = fs::read_to_string(&filename).unwrap();
@@ -55,9 +61,10 @@ fn apply_patch_file<P: AsRef<Path>>(patch_file_path: P)
 
 fn patch_source<P: AsRef<Path>>(src_dir: P)
 {
-    apply_patch_file("installer_path.patch");
-    apply_patch_file("winusb_only.patch");
-    apply_patch_file("static_windows_error_str.patch");
+    let src_dir = src_dir.as_ref();
+    apply_patch_file(src_dir, "installer_path.patch");
+    apply_patch_file(src_dir, "winusb_only.patch");
+    apply_patch_file(src_dir, "static_windows_error_str.patch");
 }
 
 
@@ -100,13 +107,14 @@ fn make_installer<P: AsRef<Path>>(out_dir: P, src_dir: P, include_dir: P)
         .arg(src_dir.join("installer.c"))
         //.arg(format!("/Fe{}", out_dir.join("libwdi").join("installer_x64.exe").display())) // Set output name.
         .arg(format!("/Fe{}", src_dir.join("installer_x64.exe").display())) // Set output name.
+        .arg("-fuse-ld=lld-link")
         .args(&[
             "/link",
             "newdev.lib",
             "setupapi.lib",
             "user32.lib",
             "ole32.lib",
-            "Advapi32.lib",
+            "AdvAPI32.Lib",
         ])
         .status()
         .unwrap()
@@ -133,13 +141,26 @@ fn make_embedder<P: AsRef<Path>>(out_dir: P, src_dir: P, include_dir: P)
     let out_dir = out_dir.as_ref();
     let src_dir = src_dir.as_ref();
     let include_dir = include_dir.as_ref();
+    let output_path = out_dir.join("embedder.exe");
 
     let mut embedder = cc::Build::new();
     embedder
         .static_crt(true)
-        .include(&include_dir)
+        .target(&env::var("HOST").expect("HOST environment variable not present"));
+    if !cfg!(windows) {
+        embedder.define("_MSC_VER", "1929");
+        if let Ok(val) = env::var("WDK_DIR") {
+            embedder.define("WDK_DIR", Some(format!(r#""{}""#, val).as_str()));
+        } else {
+            eprintln!("Error: WDK_DIR environment variable required when cross compiling");
+            eprintln!("Hint: Download the WDK 8.0 redistributable components here: https://learn.microsoft.com/en-us/windows-hardware/drivers/other-wdk-downloads and then set $WDK_DIR to something like '/opt/Program Files/Windows Kits/8.0' depending on where you extracted the WDK");
+            std::process::exit(2);
+        }
+    } else {
+        embedder.include(include_dir);
+    }
+    embedder
         .include(&src_dir)
-        //.include("C:/Users/Mikaela/code/1b2/bmputil/libwdi-sys/libwdi")
         .define("_CRT_SECURE_NO_WARNINGS", None)
         .define("_WINDLL", None)
         .define("_UNICODE", None)
@@ -148,13 +169,19 @@ fn make_embedder<P: AsRef<Path>>(out_dir: P, src_dir: P, include_dir: P)
         .flag_if_supported("/MT") // Runtime library: Multi-threaded.
         .flag_if_supported("/Zc:wchar_t") // Treat wchar_t as built-in type.
         .flag_if_supported("/TC") // Compile as C code
+        .flag_if_supported(&format!("/Fe{}", output_path.display()))
+        .flag_if_supported(&format!("-o{}", output_path.display()))
+        .flag_if_supported("-fuse-ld=lld-link")
         .file(src_dir.join("embedder.c"));
 
-    let output_path = src_dir.join("embedder.exe");
     let mut command = embedder.get_compiler().to_command();
     command
-        .arg("libwdi/libwdi/embedder.c")
-        .arg(format!("/Fe{}", output_path.display()))
+        .arg("libwdi/libwdi/embedder.c");
+        //.arg("-fuse-ld=lld-link")
+        //.arg("-v")
+        //.arg(format!("/Fe{}", output_path.display()));
+    dbg!(&command);
+    command
         .status()
         .unwrap()
         .exit_ok()
@@ -166,13 +193,15 @@ where
     POutDirT: AsRef<Path>,
     PSrcDirT: AsRef<Path>,
 {
+    eprintln!("Running embedder");
     let out_dir: &Path = out_dir.as_ref();
     let src_dir: &Path = src_dir.as_ref();
-    let mut cmd = Command::new(src_dir.join("embedder.exe"));
+    let mut cmd = Command::new(out_dir.join("embedder.exe"));
     cmd
         .current_dir(src_dir)
-        .arg("embedded.h")
-        .status().unwrap().exit_ok().unwrap();
+        .arg("embedded.h");
+    dbg!(&cmd);
+    cmd.status().unwrap().exit_ok().expect("embedder executable returned non-zero exit code");
 
 }
 
@@ -260,6 +289,6 @@ fn main()
     }
 
     // libwdi system library dependencies.
-    println!("cargo:rustc-link-lib=Shell32");
-    println!("cargo:rustc-link-lib=Ole32");
+    println!("cargo:rustc-link-lib=shell32");
+    println!("cargo:rustc-link-lib=ole32");
 }
