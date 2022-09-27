@@ -2,6 +2,7 @@
 name = "libwdi-sys"
 version = "0.1.0"
 edition = "2021"
+links = "wdi"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -13,4 +14,6 @@ dynamic-bindgen = []
 bindgen = "0.60.1"
 cc = "1.0.73"
 diffy = "0.2.2"
+env_logger = "0.9.1"
+log = { version = "0.4.17", features = ["std"] }
 winapi = "0.3.9"
