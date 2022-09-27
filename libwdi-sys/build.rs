@@ -269,6 +269,7 @@ impl LibwdiBuild
         info!("{:?}", cc_cmd);
 
         cc_cmd
+            .current_dir(&self.out_dir)
             .status()
             .unwrap()
             .exit_ok()
@@ -316,6 +317,7 @@ impl LibwdiBuild
         info!("{:?}", cc_cmd);
 
         cc_cmd
+            .current_dir(&self.out_dir)
             .status()
             .unwrap()
             .exit_ok()
