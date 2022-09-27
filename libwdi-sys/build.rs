@@ -9,26 +9,39 @@ use std::path::{Path, PathBuf};
 
 use diffy::Patch;
 
-trait IoIgnoreAlreadyExists<E>
+
+/// Holds the "global state" that gets passed around to various functions.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Dirs
 {
-    fn ignore_already_exists(self) -> Result<(), E>;
+    out_dir: PathBuf,
+    libwdi_repo: PathBuf,
+    msvc_inc: PathBuf,
+    src_dir: PathBuf,
+    host_inc: PathBuf,
+    include: PathBuf,
 }
 
-impl<T> IoIgnoreAlreadyExists<std::io::Error> for std::io::Result<T>
+trait IoIgnoreAlreadyExists<T, E>
 {
-    fn ignore_already_exists(self) -> Result<(), std::io::Error>
+    fn ignore_already_exists(self) -> Result<Option<T>, E>;
+}
+
+impl<T> IoIgnoreAlreadyExists<T, std::io::Error> for std::io::Result<T>
+{
+    fn ignore_already_exists(self) -> Result<Option<T>, std::io::Error>
     {
         match self {
-            Ok(v) => Ok(()),
+            Ok(v) => Ok(Some(v)),
             Err(e) => match e.kind() {
-                std::io::ErrorKind::AlreadyExists => Ok(()),
+                std::io::ErrorKind::AlreadyExists => Ok(None),
                 _ => Err(e)
             }
         }
     }
 }
 
-fn apply_patch_file<SrcP, PatchP>(src_dir: SrcP, patch_file_path: PatchP)
+fn apply_patch_file<SrcP, PatchP>(src_dir: SrcP, patch_file_path: PatchP) -> Result<(), diffy::ApplyError>
 where
     SrcP: AsRef<Path>,
     PatchP: AsRef<Path>,
@@ -45,45 +58,54 @@ where
 
     // Get the file to patch, and patch its text.
     let base_text = fs::read_to_string(&filename).unwrap();
-    let patched_text = match diffy::apply(&base_text, &patch) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Warning: patching {} failed, but this could just be because the patch has already been applied.", &filename);
-            eprintln!("Warning: if building fails, this error might be the reason why: {:?}", e);
-            return;
-        },
-    };
+    let patched_text = diffy::apply(&base_text, &patch)?;
 
     // Write the patched text to the file.
     fs::write(&filename, &patched_text).unwrap();
+
+    Ok(())
 }
 
 
-fn patch_source<P: AsRef<Path>>(src_dir: P)
+fn patch_source(dirs: &Dirs)
 {
-    let src_dir = src_dir.as_ref();
-    apply_patch_file(src_dir, "installer_path.patch");
-    apply_patch_file(src_dir, "winusb_only.patch");
-    apply_patch_file(src_dir, "static_windows_error_str.patch");
+    let src_dir = &dirs.src_dir;
+
+    let res = &[
+        (apply_patch_file(src_dir, "installer_path.patch"), "installer_path.patch"),
+        (apply_patch_file(src_dir, "winusb_only.patch"), "winusb_only.patch"),
+        (apply_patch_file(src_dir, "static_windows_error_str.patch"), "static_windows_error_str.patch"),
+    ];
+
+    if res.iter().any(|val| val.0.is_err()) {
+        let names: Vec<&str> = res.iter().map(|val| val.1).collect();
+        let errors: Vec<&diffy::ApplyError> = res
+            .into_iter()
+            .filter_map(|val| {
+                match &val.0 {
+                    Ok(_val) => None,
+                    Err(e) => Some(e),
+                }
+            })
+            .collect();
+
+        eprintln!("Warning: patching {:?} failed, but this could just be because the patch has already been applied.", names);
+        eprintln!("Warning: if building fails, the following errors may be why: {:?}", errors);
+    }
 }
 
 
-fn make_installer<P: AsRef<Path>>(out_dir: P, src_dir: P, include_dir: P)
+fn make_installer(dirs: &Dirs)
 {
-    let out_dir = out_dir.as_ref();
-    let src_dir = src_dir.as_ref();
-    let include_dir = include_dir.as_ref();
+    eprintln!("Building installer_x64...");
 
-    std::fs::create_dir(out_dir.join("libwdi"))
+    let out_dir = &dirs.out_dir;
+    let src_dir = &dirs.src_dir;
+    let include_dir = &dirs.msvc_inc;
+
+    fs::create_dir(out_dir.join("libwdi"))
         .ignore_already_exists()
         .unwrap();
-    //match std::fs::create_dir(out_dir.join("libwdi")) {
-        //Ok(_) => Ok(()),
-        //Err(e) => match e.kind() {
-            //std::io::ErrorKind::AlreadyExists => Ok(()),
-            //_ => Err(e),
-        //},
-    //}.unwrap();
 
     let mut installer = cc::Build::new();
 
@@ -115,7 +137,11 @@ fn make_installer<P: AsRef<Path>>(out_dir: P, src_dir: P, include_dir: P)
             "user32.lib",
             "ole32.lib",
             "AdvAPI32.Lib",
-        ])
+        ]);
+
+    eprintln!("{:?}", command);
+
+    command
         .status()
         .unwrap()
         .exit_ok()
@@ -135,32 +161,54 @@ fn make_installer<P: AsRef<Path>>(out_dir: P, src_dir: P, include_dir: P)
     // -p:PreferredToolArchitecture=x64 -p:Configuration=Release
 }
 
-fn make_embedder<P: AsRef<Path>>(out_dir: P, src_dir: P, include_dir: P)
+fn make_embedder(dirs: &Dirs)
 {
     eprintln!("Building embedder host binary...");
-    let out_dir = out_dir.as_ref();
-    let src_dir = src_dir.as_ref();
-    let include_dir = include_dir.as_ref();
+    let out_dir = &dirs.out_dir;
+    let src_dir = &dirs.src_dir;
+    let include_dir = &dirs.msvc_inc;
+
     let output_path = out_dir.join("embedder.exe");
 
     let mut embedder = cc::Build::new();
     embedder
         .static_crt(true)
         .target(&env::var("HOST").expect("HOST environment variable not present"));
+
+    // If we're cross compiling...
     if !cfg!(windows) {
+
+        // We still need config.h, which is in the "msvc" folder, but we need to NOT have the
+        // headers in the "msvc" folder in the include path. So let's copy config.h elsewhere and
+        // add that to the include path.
+        fs::create_dir(out_dir.join("host-include"))
+            .ignore_already_exists()
+            .expect(&format!("error creating {}", out_dir.join("host-include").display()));
+        fs::copy(include_dir.join("config.h"), out_dir.join("host-include").join("config.h"))
+            .ignore_already_exists()
+            .expect(&format!("error copying {} to {}", include_dir.join("config.h").display(), out_dir.join("include").display()));
+
+        embedder.include(out_dir.join("host-include"));
+
+        // That config.h errors if _MSC_VER isn't defined, so let's just define it.
         embedder.define("_MSC_VER", "1929");
+
+        // And finally, set WDK_DIR to the equivalent environment variable.
         if let Ok(val) = env::var("WDK_DIR") {
             embedder.define("WDK_DIR", Some(format!(r#""{}""#, val).as_str()));
         } else {
             eprintln!("Error: WDK_DIR environment variable required when cross compiling");
-            eprintln!("Hint: Download the WDK 8.0 redistributable components here: https://learn.microsoft.com/en-us/windows-hardware/drivers/other-wdk-downloads and then set $WDK_DIR to something like '/opt/Program Files/Windows Kits/8.0' depending on where you extracted the WDK");
+            eprintln!("Hint: Download the WDK 8.0 redistributable components here: https://learn.microsoft.com/en-us/windows-hardware/drivers/other-wdk-downloads\nand then set $WDK_DIR to something like '/opt/Program Files/Windows Kits/8.0' depending on where you extracted the WDK");
             std::process::exit(2);
         }
     } else {
+        // If we're not cross compiling, include the "msvc" directory as usual.
         embedder.include(include_dir);
     }
+
     embedder
         .include(&src_dir)
+        .include(&dirs.include)
         .define("_CRT_SECURE_NO_WARNINGS", None)
         .define("_WINDLL", None)
         .define("_UNICODE", None)
@@ -169,18 +217,15 @@ fn make_embedder<P: AsRef<Path>>(out_dir: P, src_dir: P, include_dir: P)
         .flag_if_supported("/MT") // Runtime library: Multi-threaded.
         .flag_if_supported("/Zc:wchar_t") // Treat wchar_t as built-in type.
         .flag_if_supported("/TC") // Compile as C code
-        .flag_if_supported(&format!("/Fe{}", output_path.display()))
-        .flag_if_supported(&format!("-o{}", output_path.display()))
+        .flag_if_supported(&format!("/Fe{}", output_path.display())) // MSVC-style setting output
+        .flag_if_supported(&format!("-o{}", output_path.display())) // GCC-style setting output
         .flag_if_supported("-fuse-ld=lld-link")
         .file(src_dir.join("embedder.c"));
 
     let mut command = embedder.get_compiler().to_command();
     command
         .arg("libwdi/libwdi/embedder.c");
-        //.arg("-fuse-ld=lld-link")
-        //.arg("-v")
-        //.arg(format!("/Fe{}", output_path.display()));
-    dbg!(&command);
+    eprintln!("{:?}", command);
     command
         .status()
         .unwrap()
@@ -188,27 +233,26 @@ fn make_embedder<P: AsRef<Path>>(out_dir: P, src_dir: P, include_dir: P)
         .unwrap();
 }
 
-fn run_embedder<POutDirT, PSrcDirT>(out_dir: POutDirT, src_dir: PSrcDirT)
-where
-    POutDirT: AsRef<Path>,
-    PSrcDirT: AsRef<Path>,
+fn run_embedder(dirs: &Dirs)
 {
-    eprintln!("Running embedder");
-    let out_dir: &Path = out_dir.as_ref();
-    let src_dir: &Path = src_dir.as_ref();
+    eprintln!("Running embedder host binary");
+
+    let out_dir = &dirs.out_dir;
+    let src_dir = &dirs.src_dir;
+
     let mut cmd = Command::new(out_dir.join("embedder.exe"));
     cmd
         .current_dir(src_dir)
         .arg("embedded.h");
-    dbg!(&cmd);
+    eprintln!("{:?}", cmd);
     cmd.status().unwrap().exit_ok().expect("embedder executable returned non-zero exit code");
 
 }
 
 
-fn run_bindgen<P: AsRef<Path>>(out_dir: P)
+fn run_bindgen(dirs: &Dirs)
 {
-    let out_dir: &Path = out_dir.as_ref();
+    let out_dir = &dirs.out_dir;
 
     // HACK: attempt to find libclang.dll from Visual Studio.
     let msvc = cc::windows_registry::find_tool("x86_64-pc-windows-msvc", "vcruntime140.dll")
@@ -253,18 +297,43 @@ fn main()
     let include_dir = PathBuf::from(&libwdi_repo).join("msvc");
     let src_dir = PathBuf::from(&libwdi_repo).join("libwdi");
 
-    let mut build64 = File::create(src_dir.join("build64.h")).unwrap();
-    writeln!(build64, "#define BUILD64\n").unwrap();
+    let host_include = out_dir.join("host-include");
+    fs::create_dir(&host_include)
+        .ignore_already_exists()
+        .expect(&format!("error creating {}", host_include.display()));
+
+    let include = out_dir.join("include");
+    fs::create_dir(&include)
+        .ignore_already_exists()
+        .expect(&format!("error creating {}", include.display()));
+
+
+    let dirs = Dirs {
+        out_dir,
+        libwdi_repo,
+        msvc_inc: include_dir,
+        src_dir,
+        host_inc: host_include,
+        include,
+    };
+
+
+    // libwdi needs a header file called build64.h with this simple define, so let's create it.
+    let mut build64 = File::create(dirs.include.join("build64.h"))
+        .expect(&format!("error creating {}", dirs.include.join("build64.h").display()));
+    writeln!(build64, "#define BUILD64\n")
+        .expect(&format!("error writing to {}", dirs.include.join("build64.h").display()));
+
     drop(build64); // Apparently flushing is not enough, on Windows.
 
-    patch_source(&src_dir);
+    patch_source(&dirs);
 
-    make_embedder(&out_dir, &src_dir, &include_dir);
-    make_installer(&out_dir, &src_dir, &include_dir);
+    make_embedder(&dirs);
+    make_installer(&dirs);
 
     std::thread::sleep(std::time::Duration::from_secs(1)); // XXX
 
-    run_embedder(&out_dir, &src_dir);
+    run_embedder(&dirs);
 
     let libwdi_srcs = [
         "libwdi.c",
@@ -273,19 +342,19 @@ fn main()
         "pki.c",
         "tokenizer.c",
         "vid_data.c",
-    ].map(|src_path| src_dir.join(src_path));
+    ].map(|src_path| dirs.src_dir.join(src_path));
 
 
 
     let mut build = cc::Build::new();
     build
-        .include(&include_dir)
-        .include(&libwdi_repo)
+        .include(&dirs.msvc_inc)
+        .include(&dirs.libwdi_repo)
         .files(&libwdi_srcs)
         .compile("wdi");
 
     if cfg!(feature = "dynamic-bindgen") {
-        run_bindgen(&out_dir);
+        run_bindgen(&dirs);
     }
 
     // libwdi system library dependencies.
