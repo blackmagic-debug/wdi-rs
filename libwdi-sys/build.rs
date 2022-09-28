@@ -10,6 +10,13 @@ use std::path::{Path, PathBuf};
 use log::{LevelFilter, info, error};
 use diffy::Patch;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum BuildType
+{
+    Host,
+    Target,
+}
+
 
 /// Turns a [cc::Build] into a [Command] that can be used to create an executable,
 /// since cc-rs doesn't directly support compiling executables.
@@ -58,11 +65,10 @@ impl LibwdiBuild
         }
     }
 
-    pub fn apply_common_cc_options(&self, build: &mut cc::Build)
+    pub fn apply_common_cc_options(&self, build: &mut cc::Build, build_type: BuildType)
     {
         build
             .include(self.libwdi_src.join("libwdi"))
-            .include(self.libwdi_src.join("msvc"))
             .define("_CRT_SECURE_NO_WARNINGS", None)
             .define("_WINDLL", None) // FIXME: Do we want this one?
             .define("_UNICODE", None)
@@ -73,6 +79,15 @@ impl LibwdiBuild
             .flag_if_supported("/Zc:wchar_t") // Treat wchar_t as a built-in type.
             .flag_if_supported("/TC") // Compile as C code.
         ;
+
+        if build_type == BuildType::Host && cfg!(not(windows)) {
+            // If we're cross compiling generally, but this cc::Build is for the host,
+            // add the special host-include path.
+            build.include(self.libwdi_src.join("host-include"));
+        } else {
+            // Otherwise, make sure the "msvc" directory is in the include path.
+            build.include(self.libwdi_src.join("msvc"));
+        }
 
     }
 
@@ -120,16 +135,14 @@ impl LibwdiBuild
             .map(|filename| Path::new("libwdi").join(filename))
             .collect();
 
-        // If we're NOT cross compiling, we also need to copy the other headers in the "msvc" tree.
-        if cfg!(windows) {
-            let msvc_headers = [
-                "inttypes.h",
-                "stdint.h",
-            ]
-                .into_iter()
-                .map(|filename| Path::new("msvc").join(filename));
-            as_is.extend(msvc_headers);
-        }
+        // Add the MSVC headers as well.
+        let msvc_headers = [
+            "inttypes.h",
+            "stdint.h",
+        ]
+            .into_iter()
+            .map(|filename| Path::new("msvc").join(filename));
+        as_is.extend(msvc_headers);
 
 
         // Let Cargo know we depend on aaaaaall of these files.
@@ -159,6 +172,19 @@ impl LibwdiBuild
         // Almost done. Patch the sources we need to patch...
         for (src_file, patch_file) in needs_patch {
             self.apply_patch_file(src_file, patch_file);
+        }
+
+        // Minor hack: when cross compiling, the host needs a config.h, but needs to NOT have the
+        // msvc headers in the include path. Let's create a special directory for that.
+        if cfg!(not(windows)) {
+
+            let host_include = self.libwdi_src.join("host-include");
+            fs::create_dir_all(&host_include)
+                .expect(&format!("Error creating {} directory", host_include.display()));
+
+            // And copy config.h to it.
+            fs::copy(self.libwdi_src.join("msvc/config.h"), self.libwdi_src.join("host-include/config.h"))
+                .expect("Failed to copy config.h to host-include directory");
         }
 
         // Copy the rest of the sources over...
@@ -226,9 +252,7 @@ impl LibwdiBuild
         embedder
             .static_crt(true)
             .target(&env::var("HOST").expect("Cargo always sets HOST"))
-            .include(self.libwdi_src.join("libwdi"))
-            .include(self.libwdi_src.join("msvc"))
-        ;
+            .include(self.libwdi_src.join("libwdi"));
 
         // Allow the user to specify WDK_DIR environment variable to override the default WDK
         // directory. This becomes necessary when cross compiling.
@@ -248,12 +272,14 @@ impl LibwdiBuild
                 error!("Hint: Download the WDK 8.0 redistributable components here: https://learn.microsoft.com/en-us/windows-hardware/drivers/other-wdk-downloads\nand then set $WDK_DIR to something like '/opt/Program Files/Windows Kits/8.0' depending on where you extracted the WDK");
                 panic!("WDK_DIR environment variable required when cross compiling");
             }
+        } else {
+            embedder.include(self.libwdi_src.join("msvc"));
         }
 
         // Technically this is a host binary, but it's not like a host binary ending in .exe is an
         // error on Linux or macOS.
         let output_path = self.out_dir.join("embedder.exe");
-        self.apply_common_cc_options(&mut embedder);
+        self.apply_common_cc_options(&mut embedder, BuildType::Host);
         embedder
             .flag_if_supported(&format!("/Fe{}", output_path.display())) // MSVC-style.
             .flag_if_supported(&format!("-o{}", output_path.display())); // GCC-style.
@@ -293,7 +319,7 @@ impl LibwdiBuild
         let output_path = self.out_dir.join("installer_x64.exe");
 
         let mut installer = cc::Build::new();
-        self.apply_common_cc_options(&mut installer);
+        self.apply_common_cc_options(&mut installer, BuildType::Target);
 
         let mut cc_cmd = installer
             .static_crt(true)
@@ -358,7 +384,7 @@ impl LibwdiBuild
             .collect();
 
         let mut lib = cc::Build::new();
-        self.apply_common_cc_options(&mut lib);
+        self.apply_common_cc_options(&mut lib, BuildType::Target);
         lib
             .files(&lib_srcs)
             .compile("wdi");
