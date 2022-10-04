@@ -18,6 +18,33 @@ pub enum BuildType
 }
 
 
+fn getenv(v: &str) -> Option<String>
+{
+    env::var(v).ok()
+}
+
+/// Reimplementation of private function [cc::Build::get_var].
+fn get_cc_var(var_base: &str) -> Option<String>
+{
+    let host = env::var("HOST")
+        .expect("Cargo always sets HOST variable");
+    let target = env::var("TARGET")
+        .expect("Cargo always sets TARGET variable");
+    let kind = if host == target { "HOST" } else { "TARGET" };
+
+    let target_u = target.replace("-", "_");
+    let res = getenv(&format!("{}_{}", var_base, target))
+        .or_else(|| getenv(&format!("{}_{}", var_base, target_u)))
+        .or_else(|| getenv(&format!("{}_{}", kind, var_base)))
+        .or_else(|| getenv(var_base));
+
+    match res {
+        Some(res) => Some(res),
+        None => None,
+    }
+}
+
+
 /// Turns a [cc::Build] into a [Command] that can be used to create an executable,
 /// since cc-rs doesn't directly support compiling executables.
 trait CcOutputExecutable
@@ -63,6 +90,61 @@ impl LibwdiBuild
             libwdi_repo,
             libwdi_src,
         }
+    }
+
+    /// A hack to apply necessary linker options if we're compiling with cargo-xwin.
+    /// This returns an empty Vec if we're not running under cargo-xwin.
+    pub fn get_linker_options(&self) -> Vec<String>
+    {
+        // cc-rs isn't meant for compiling binaries, and so cargo-xwin doesn't
+        // bother letting the linker know where the Windows SDK and MSCRT are.
+        // Let's detect if we're compiling under cargo-xwin, and if so scrape
+        // the locations we need from the variables it *does* set, and then hack
+        // in the linker flags.
+
+        let mut link_args: Vec<String> = Vec::with_capacity(3);
+
+        let cflags = match get_cc_var("CFLAGS") {
+            Some(v) => v,
+            None => return link_args,
+        };
+
+        if !cflags.contains("cargo-xwin") {
+            return link_args;
+        }
+        let args: Vec<&str> = cflags.split_whitespace().collect();
+        let crt_include_arg = args
+            .iter()
+            .find(|arg| arg.contains("/imsvc") && arg.contains("crt/include"));
+
+        let crt_include_arg = match crt_include_arg {
+            Some(v) => *v,
+            None => return link_args,
+        };
+
+        // Should have the format `/imsvc{xwin_dir}/crt/include`.
+        // So let's remove the `/imsvc` prefix and `/crt/include` suffix.
+        let imsvc_len = "/imsvc".len();
+        let without_imsvc = &crt_include_arg[imsvc_len..];
+        let inc_idx = match without_imsvc.find("/crt/include") {
+            Some(v) => v,
+            None => return link_args,
+        };
+
+        let xwin_dir = Path::new(&without_imsvc[0..inc_idx]);
+
+        let target_arch = env::var("CARGO_CFG_TARGET_ARCH")
+            .expect("Cargo always sets CARGO_CFG_TARGET_ARCH");
+
+        let sdk_lib_dir = xwin_dir.join(&format!("sdk/lib/um/{}", &target_arch));
+        let ucrt_lib_dir = xwin_dir.join(&format!("sdk/lib/ucrt/{}", &target_arch));
+        let crt_lib_dir = xwin_dir.join(&format!("crt/lib/{}", &target_arch));
+
+        for lib_dir in [sdk_lib_dir, ucrt_lib_dir, crt_lib_dir] {
+            link_args.push(format!("/libpath:{}", lib_dir.to_str().unwrap()));
+        }
+
+        return link_args;
     }
 
     pub fn apply_common_cc_options(&self, build: &mut cc::Build, build_type: BuildType)
@@ -318,6 +400,10 @@ impl LibwdiBuild
 
         let output_path = self.out_dir.join("installer_x64.exe");
 
+        // HACK: if we're running under cargo-xwin then we need to scrape out its xwin directory
+        // and let the linker know where the xwin'd SDK and CRT are.
+        let linker_flags = self.get_linker_options();
+
         let mut installer = cc::Build::new();
         self.apply_common_cc_options(&mut installer, BuildType::Target);
 
@@ -338,7 +424,8 @@ impl LibwdiBuild
                 "user32.lib",
                 "ole32.lib",
                 "advapi32.lib",
-            ]);
+            ])
+            .args(&linker_flags);
 
         info!("{:?}", cc_cmd);
 
