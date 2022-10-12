@@ -4,6 +4,7 @@ use std::env;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
+use std::ffi::{OsStr, OsString};
 use std::process::Command;
 use std::path::{Path, PathBuf};
 
@@ -11,10 +12,51 @@ use log::{LevelFilter, info, error};
 use diffy::Patch;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum BuildType
+enum BuildType
 {
     Host,
     Target,
+}
+
+
+/// HACK: Converts an AsRef<Path> to something suitable for passing arguments to a command.
+/// This is for working around an edge case when cross compiling using clang-cl on macOS,
+/// where absolute filepaths are interpreted as the /U command-line switch for undefining
+/// macros, instead of a file name. You can use `--` to indicate all following arguments are
+/// filenames, but then you can't pass any more switches like /link.
+/// Hence: this trait. This trait prepends a single slash to absolute paths starting with /U,
+/// i.e.: `/Users/foo/bar/foobar.c` -> `//Users/foo/bar/foobar.c`.
+trait PathToArg
+{
+    fn to_arg(&self) -> OsString;
+}
+impl<T: AsRef<Path>> PathToArg for T
+{
+    /// Prepends an extra leading slash to paths starting with /U, to workaround an edge case
+    /// with clang-cl on macOS. See the trait-level documentation for more.
+    fn to_arg(&self) -> OsString
+    {
+        let path = self.as_ref();
+        let path_str = path.as_os_str();
+
+        // OsStr does not have a .starts_with().
+        // https://github.com/rust-lang/rfcs/issues/900.
+        let path_lossy = path_str.to_string_lossy();
+
+        // Only modify paths that start with /U. We don't use any other criteria for modification,
+        // because either it's a path that starts with /U and needs to be escaped, or it's intended
+        // to be the switch for undefining a macro, in which case this argument shouldn't be in
+        // a [Path] anyway.
+        if !path_lossy.starts_with("/U") {
+            return path_str.to_owned();
+        }
+
+        let mut arg_str = OsString::with_capacity(path_str.len() + 1);
+        arg_str.push(OsStr::new("/"));
+        arg_str.push(path_str);
+
+        arg_str
+    }
 }
 
 
@@ -413,9 +455,8 @@ impl LibwdiBuild
             .output_executable();
 
         cc_cmd
-            // Add the C source file, because cc::Build::file() doesn't survive the conversion
-            // to a Command.
-            .arg(self.libwdi_src.join("libwdi/installer.c"))
+            // See [PathToArg] for why the .to_arg() is here.
+            .arg(self.libwdi_src.join("libwdi/installer.c").to_arg())
             // Add the WinAPI libraries we need to link against.
             .args(&[
                 "/link",
@@ -454,11 +495,11 @@ impl LibwdiBuild
             .expect("Embedder executable returned non-zero exit code");
     }
 
-    pub fn make_lib(&self)
+    fn make_lib(&self)
     {
         info!("Building libwdi static library...");
 
-        let lib_srcs: Vec<PathBuf> = [
+        let lib_srcs: Vec<OsString> = [
             "libwdi.c",
             "libwdi_dlg.c",
             "logging.c",
@@ -467,7 +508,8 @@ impl LibwdiBuild
             "vid_data.c",
         ]
             .into_iter()
-            .map(|path| self.libwdi_src.join("libwdi").join(path))
+            // See [PathToArg] for why the .to_arg() is here.
+            .map(|path| self.libwdi_src.join("libwdi").join(path).to_arg())
             .collect();
 
         let mut lib = cc::Build::new();
