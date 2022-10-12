@@ -59,7 +59,7 @@ impl CcOutputExecutable for cc::Build
     }
 }
 
-pub struct LibwdiBuild
+struct LibwdiBuild
 {
     /// Absolute path to the current working directory (should be libwdi-sys crate).
     cwd: PathBuf,
@@ -77,7 +77,7 @@ pub struct LibwdiBuild
 
 impl LibwdiBuild
 {
-    pub fn new() -> Self
+    fn new() -> Self
     {
         let cwd = env::current_dir().unwrap();
         let out_dir = PathBuf::from(env::var("OUT_DIR").expect("Cargo always sets OUT_DIR"));
@@ -94,7 +94,7 @@ impl LibwdiBuild
 
     /// A hack to apply necessary linker options if we're compiling with cargo-xwin.
     /// This returns an empty Vec if we're not running under cargo-xwin.
-    pub fn get_linker_options(&self) -> Vec<String>
+    fn get_linker_options(&self) -> Vec<String>
     {
         // cc-rs isn't meant for compiling binaries, and so cargo-xwin doesn't
         // bother letting the linker know where the Windows SDK and MSCRT are.
@@ -147,7 +147,7 @@ impl LibwdiBuild
         return link_args;
     }
 
-    pub fn apply_common_cc_options(&self, build: &mut cc::Build, build_type: BuildType)
+    fn apply_common_cc_options(&self, build: &mut cc::Build, build_type: BuildType)
     {
         build
             .include(self.libwdi_src.join("libwdi"))
@@ -174,7 +174,7 @@ impl LibwdiBuild
     }
 
     /// Copies and patches libwdi source files to a source hierarchy in OUT_DIR/libwdi.
-    pub fn populate_source_tree(&self)
+    fn populate_source_tree(&self)
     {
         // The source files that we'll copy, but need to be patched first, and their patch files.
         // Source files relative from libwdi_repo; patch files relative from current directory.
@@ -326,7 +326,7 @@ impl LibwdiBuild
             .expect(&format!("Error writing patched source file {}", target_path.display()));
     }
 
-    pub fn make_embedder(&self)
+    fn make_embedder(&self)
     {
         info!("Building embedder host binary...");
 
@@ -384,7 +384,7 @@ impl LibwdiBuild
             .expect("Compiler returned non-zero exit code");
     }
 
-    pub fn make_installer(&self)
+    fn make_installer(&self)
     {
         // The equivalent msbuild command to build this manually:
         // $MSBUILD libwdi/.msvc/installer_x64.vcxproj -p:PlatformToolset=142
@@ -437,7 +437,7 @@ impl LibwdiBuild
             .expect("Compiler returned non-zero exit code");
     }
 
-    pub fn run_embedder(&self)
+    fn run_embedder(&self)
     {
         info!("Running embedder host binary...");
 
@@ -481,7 +481,7 @@ impl LibwdiBuild
         println!("cargo:rustc-link-lib=ole32");
     }
 
-    pub fn run_bindgen(&self)
+    fn run_bindgen(&self)
     {
         // HACK: attempt to find libclang.dll from Visual Studio.
         let msvc = cc::windows_registry::find_tool("x86_64-pc-windows-msvc", "vcruntime140.dll")
