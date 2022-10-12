@@ -206,7 +206,7 @@ impl LibwdiBuild
 
         if build_type == BuildType::Host && cfg!(not(windows)) {
             // If we're cross compiling generally, but this cc::Build is for the host,
-            // add the special host-include path.
+            // add the special host-include path which includes config.h but not the msvc headers.
             build.include(self.libwdi_src.join("host-include"));
         } else {
             // Otherwise, make sure the "msvc" directory is in the include path.
@@ -221,8 +221,20 @@ impl LibwdiBuild
         // The source files that we'll copy, but need to be patched first, and their patch files.
         // Source files relative from libwdi_repo; patch files relative from current directory.
         let needs_patch = &[
+
+            // libwdi and libusb both define `char *windows_error_str()`.
+            // libwdi's does not seem intended as a public funtion. Change it to
+            // `static char *windows_error_str()`.
             (Path::new("libwdi/libwdi.c"), Path::new("static_windows_error_str.patch")),
+
+            // libwdi's embedder host program hardcodes the path to installer_x64.exe based on
+            // Visual Studio's default directory structure (e.g. `x64/Release/helper`).
+            // We're not using that, so let's patch that path.
             (Path::new("libwdi/embedder.h"), Path::new("installer_path.patch")),
+
+            // libwdi doesn't let you simply not define driver file locations for libusb-win32
+            // or libusbK to disable them, so let's disable them with a patch.
+            // FIXME: This should probably be configurable through feature flags.
             (Path::new("msvc/config.h"), Path::new("winusb_only.patch")),
         ];
 
@@ -368,6 +380,17 @@ impl LibwdiBuild
             .expect(&format!("Error writing patched source file {}", target_path.display()));
     }
 
+    /// Compiles the embedder host binary that is needed to compile libwdi.
+    ///
+    /// libwdi's normal build process involves compiling an executable, which is then run
+    /// during the build process to generate a C header file which contains the bytes of
+    /// the output of [make_installer]. This embedder binary thus must be a host executable.
+    /// It also has to be built before the other build steps.
+    /// [cc] does not support building executables, directly, so this function contains some hacks
+    /// to try to get it to work.
+    ///
+    /// If something in this build script blows up, it's probably this, especially during cross
+    /// compilation.
     fn make_embedder(&self)
     {
         info!("Building embedder host binary...");
@@ -426,6 +449,11 @@ impl LibwdiBuild
             .expect("Compiler returned non-zero exit code");
     }
 
+    /// Builds the `installer_x64.exe` which gets embedded into a C header for the rest of the
+    /// library.
+    ///
+    /// Like [make_embedder], this function also contains hacks to use [cc] to compile an
+    /// executable instead of a library.
     fn make_installer(&self)
     {
         // The equivalent msbuild command to build this manually:
@@ -478,6 +506,8 @@ impl LibwdiBuild
             .expect("Compiler returned non-zero exit code");
     }
 
+    /// Runs the host embedder executable built in [make_embedder]. See that function for more
+    /// details.
     fn run_embedder(&self)
     {
         info!("Running embedder host binary...");
@@ -495,6 +525,10 @@ impl LibwdiBuild
             .expect("Embedder executable returned non-zero exit code");
     }
 
+    /// Builds the actual libwdi static library (wdi.lib and libwdi.a).
+    ///
+    /// With [make_embedder], [make_installer], and [run_embedder] out of the way, this function
+    /// finally uses [cc] only for its intended purpose.
     fn make_lib(&self)
     {
         info!("Building libwdi static library...");
@@ -523,6 +557,8 @@ impl LibwdiBuild
         println!("cargo:rustc-link-lib=ole32");
     }
 
+    /// This function is only used when the feature "dynamic-bindgen" is enabled, which isn't
+    /// recommended.
     fn run_bindgen(&self)
     {
         // HACK: attempt to find libclang.dll from Visual Studio.
