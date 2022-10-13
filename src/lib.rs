@@ -8,6 +8,8 @@ use std::ffi::{CString, CStr};
 use std::fmt;
 use std::fmt::Display;
 
+use bstr::ByteSlice;
+
 pub mod error;
 pub use error::Error;
 
@@ -25,14 +27,20 @@ pub struct DeviceInfo
     pub pid: u16,
     pub is_composite: bool,
     pub mi: u8,
-    pub desc: String,
-    pub driver: Option<String>,
-    pub device_id: Option<String>,
-    pub hardware_id: Option<String>,
-    pub compatible_id: Option<String>,
-    pub upper_filter: Option<String>,
+    pub desc: Vec<u8>,
+    pub driver: Option<Vec<u8>>,
+    pub device_id: Option<Vec<u8>>,
+    pub hardware_id: Option<Vec<u8>>,
+    pub compatible_id: Option<Vec<u8>>,
+    pub upper_filter: Option<Vec<u8>>,
     pub driver_version: u64,
 }
+
+/// Builder API.
+//impl DeviceInfo
+//{
+    //pub fn driver(
+//}
 
 impl DeviceInfo
 {
@@ -47,41 +55,41 @@ impl DeviceInfo
     {
         let desc = if !raw.desc.is_null() {
             unsafe { CStr::from_ptr(raw.desc) }
-                .to_string_lossy().to_string()
+                .to_bytes_with_nul().to_vec()
         } else {
             panic!("Mantatory field wdi_device_info->desc is null");
         };
         let driver = if !raw.driver.is_null() {
             Some(unsafe { CStr::from_ptr(raw.driver) }
-                .to_string_lossy().to_string()
+                .to_bytes_with_nul().to_vec()
             )
         } else {
             None
         };
         let device_id = if !raw.device_id.is_null() {
             Some(unsafe { CStr::from_ptr(raw.device_id) }
-                .to_string_lossy().to_string()
+                .to_bytes_with_nul().to_vec()
             )
         } else {
             None
         };
         let hardware_id = if !raw.hardware_id.is_null() {
             Some(unsafe { CStr::from_ptr(raw.hardware_id) }
-                .to_string_lossy().to_string()
+                .to_bytes_with_nul().to_vec()
             )
         } else {
             None
         };
         let compatible_id = if !raw.compatible_id.is_null() {
             Some(unsafe { CStr::from_ptr(raw.compatible_id) }
-                .to_string_lossy().to_string()
+                .to_bytes_with_nul().to_vec()
             )
         } else {
             None
         };
         let upper_filter = if !raw.upper_filter.is_null() {
             Some(unsafe { CStr::from_ptr(raw.upper_filter) }
-                .to_string_lossy().to_string()
+                .to_bytes_with_nul().to_vec()
             )
         } else {
             None
@@ -132,12 +140,12 @@ impl fmt::Debug for DeviceInfo
             .field("pid", &format!("0x{:04x}", self.pid))
             .field("is_composite", &self.is_composite)
             .field("mi", &self.mi)
-            .field("desc", &self.desc)
-            .field("driver", &self.driver)
-            .field("device_id", &self.device_id)
-            .field("hardware_id", &self.hardware_id)
-            .field("compatible_id", &self.compatible_id)
-            .field("upper_filter", &self.upper_filter)
+            .field("desc", &self.desc.as_bstr())
+            .field("driver", &self.driver.as_ref().map(|s| s.as_bstr()))
+            .field("device_id", &self.device_id.as_ref().map(|s| s.as_bstr()))
+            .field("hardware_id", &self.hardware_id.as_ref().map(|s| s.as_bstr()))
+            .field("compatible_id", &self.compatible_id.as_ref().map(|s| s.as_bstr()))
+            .field("upper_filter", &self.upper_filter.as_ref().map(|s| s.as_bstr()))
             .field("driver_version", &self.driver_version)
             .finish()?;
 
