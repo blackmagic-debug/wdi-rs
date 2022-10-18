@@ -366,12 +366,18 @@ impl LibwdiBuild
         // First, create the Patch structure from the patch file.
         let patch_text = fs::read_to_string(patch_file)
             .expect(&format!("Error reading patch file {}", patch_file.display()));
+
+        // HACK: convert from crlf to lf, as diffy doesn't support Windows line endings.
+        let patch_text: String = patch_text.chars().into_iter().filter(|c| *c != '\r').collect();
         let patch = Patch::from_str(&patch_text)
             .expect(&format!("Patch file {} seems invalid", patch_file.display()));
 
         // Now read the file we need to patch, and then patch its text.
         let base_text = fs::read_to_string(&base_path)
             .expect(&format!("Error reading source file {} for patching", src_file.display()));
+
+        // HACK: convert from crlf to lf, as diffy doesn't support Windows line endings.
+        let base_text: String = base_text.chars().into_iter().filter(|c| *c != '\r').collect();
         let patched_text = diffy::apply(&base_text, &patch)
             .expect(&format!("Error applying patch {} to source file {}", patch_file.display(), src_file.display()));
 
