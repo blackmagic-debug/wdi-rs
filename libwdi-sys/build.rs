@@ -1,5 +1,3 @@
-#![feature(exit_status_error)]
-
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -447,12 +445,14 @@ impl LibwdiBuild
 
         info!("{:?}", cc_cmd);
 
-        cc_cmd
+        let success = cc_cmd
             .current_dir(&self.out_dir)
             .status()
             .unwrap()
-            .exit_ok()
-            .expect("Compiler returned non-zero exit code");
+            .success();
+        if !success {
+            panic!("Compiler returned non-zero exit code");
+        }
     }
 
     /// Builds the `installer_x64.exe` which gets embedded into a C header for the rest of the
@@ -504,12 +504,14 @@ impl LibwdiBuild
 
         info!("{:?}", cc_cmd);
 
-        cc_cmd
+        let success = cc_cmd
             .current_dir(&self.out_dir)
             .status()
             .unwrap()
-            .exit_ok()
-            .expect("Compiler returned non-zero exit code");
+            .success();
+        if !success {
+            panic!("Compiler returned non-zero exit code");
+        }
     }
 
     /// Runs the host embedder executable built in [make_embedder]. See that function for more
@@ -524,11 +526,13 @@ impl LibwdiBuild
             .arg("embedded.h");
         info!("{:?}", cmd);
 
-        cmd
+        let success = cmd
             .status()
             .unwrap()
-            .exit_ok()
-            .expect("Embedder executable returned non-zero exit code");
+            .success();
+        if !success {
+            panic!("Embedder executable returned non-zero exit code");
+        }
     }
 
     /// Builds the actual libwdi static library (wdi.lib and libwdi.a).
