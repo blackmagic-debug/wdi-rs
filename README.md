@@ -1,4 +1,4 @@
-# wd-rs — A safe Rust wrapper for libwdi
+# wdi-rs — A safe Rust wrapper for libwdi
 
 Warning: this crate is extremely work in progress and the actual wrapping is very bare bones. The functionality
 implemented exists almost entirely for [bmputil](https://github.com/blackmagic-debug/bmputil).
