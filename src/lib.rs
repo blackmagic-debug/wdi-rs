@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-FileCopyrightText: 2022-2023 1BitSquared <info@1bitsquared.com>
+// SPDX-FileContributor: Written by Mikaela Szekely <mikaela.szekely@qyriad.me>
 //! High-ish level API to [libwdi](https://github.com/pbatard/libwdi).
 //!
 //! This crate is still extremely work in progress, but the major high level functions of interest
