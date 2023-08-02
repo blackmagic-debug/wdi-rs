@@ -11,9 +11,9 @@ links = "wdi"
 dynamic-bindgen = []
 
 [build-dependencies]
-bindgen = "0.60.1"
-cc = "1.0.73"
-diffy = "0.2.2"
-env_logger = "0.9.1"
-log = { version = "0.4.17", features = ["std"] }
+bindgen = "0.66.1"
+cc = "1.0.80"
+diffy = "0.3.0"
+env_logger = "0.10.0"
+log = { version = "0.4.19", features = ["std"] }
 winapi = "0.3.9"
