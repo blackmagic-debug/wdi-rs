@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 libwdi-sys = { path = "libwdi-sys" }
 winapi = { version = "0.3.9", features = ["setupapi"] }
-bstr = "1.0.1"
+bstr = "1.6.0"
