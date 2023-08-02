@@ -383,7 +383,7 @@ impl LibwdiBuild
     ///
     /// libwdi's normal build process involves compiling an executable, which is then run
     /// during the build process to generate a C header file which contains the bytes of
-    /// the output of [make_installer]. This embedder binary thus must be a host executable.
+    /// the output of [make_installer_x86_64]. This embedder binary thus must be a host executable.
     /// It also has to be built before the other build steps.
     /// [cc] does not support building executables, directly, so this function contains some hacks
     /// to try to get it to work.
@@ -450,12 +450,12 @@ impl LibwdiBuild
         }
     }
 
-    /// Builds the `installer_x64.exe` which gets embedded into a C header for the rest of the
-    /// library.
+    /// Builds the `installer_x64.exe` binary which gets embedded into a C header for the
+    /// rest of the library.
     ///
     /// Like [make_embedder], this function also contains hacks to use [cc] to compile an
     /// executable instead of a library.
-    fn make_installer(&self)
+    fn make_installer_x86_64(&self)
     {
         // The equivalent msbuild command to build this manually:
         // $MSBUILD libwdi/.msvc/installer_x64.vcxproj -p:PlatformToolset=142
@@ -531,7 +531,7 @@ impl LibwdiBuild
 
     /// Builds the actual libwdi static library (wdi.lib and libwdi.a).
     ///
-    /// With [make_embedder], [make_installer], and [run_embedder] out of the way, this function
+    /// With [make_embedder], [make_installer_x86_64], and [run_embedder] out of the way, this function
     /// finally uses [cc] only for its intended purpose.
     fn make_lib(&self)
     {
@@ -611,7 +611,7 @@ fn main()
     let build = LibwdiBuild::new();
     build.populate_source_tree();
     build.make_embedder();
-    build.make_installer();
+    build.make_installer_x86_64();
     build.run_embedder();
     build.make_lib();
 
