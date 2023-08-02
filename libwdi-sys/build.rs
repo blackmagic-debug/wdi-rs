@@ -220,9 +220,9 @@ impl LibwdiBuild
         // Source files relative from libwdi_repo; patch files relative from current directory.
         let needs_patch = &[
 
-            // libwdi and libusb both define `char *windows_error_str()`.
-            // libwdi's does not seem intended as a public funtion. Change it to
-            // `static char *windows_error_str()`.
+            // libwdi defines `char *wdi_windows_error_str()` which does not seem
+            // to be intended to be a public funtion. Change it to
+            // `static char *wdi_windows_error_str()`.
             (Path::new("libwdi/libwdi.c"), Path::new("static_windows_error_str.patch")),
 
             // libwdi's embedder host program hardcodes the path to installer_x64.exe based on
@@ -278,7 +278,6 @@ impl LibwdiBuild
             .map(|filename| Path::new("msvc").join(filename));
         as_is.extend(msvc_headers);
 
-
         // Let Cargo know we depend on aaaaaall of these files.
         let mut all_needed_files: Vec<PathBuf> = Vec::with_capacity(as_is.len() + needs_patch.len());
         all_needed_files.extend(needs_patch.map(|item| self.libwdi_repo.join(item.0)));
@@ -288,7 +287,6 @@ impl LibwdiBuild
         for file in all_needed_files {
             println!("cargo:rerun-if-changed={}", file.display());
         }
-
 
         // Create the directories we need inside OUT_DIR to copy the source tree.
 
@@ -301,7 +299,6 @@ impl LibwdiBuild
             fs::create_dir_all(&dir)
                 .expect(&format!("Error creating {} directory", dir.display()));
         }
-
 
         // Almost done. Patch the sources we need to patch...
         for (src_file, patch_file) in needs_patch {
@@ -329,7 +326,6 @@ impl LibwdiBuild
                 .expect(&format!("Error copying {} to {}", repo_file.display(), target_file.display()));
         }
 
-
         // And finally, create one last header file from scratch: build64.h.
         // libwdi needs it with this simple define.
 
@@ -341,7 +337,6 @@ impl LibwdiBuild
 
         // Flushing is apparently not enough, on Windows.
         drop(build64_path);
-
 
         // And we're done! :tada:
     }
@@ -470,7 +465,6 @@ impl LibwdiBuild
         // cl.exe /c /I..\..\msvc /Zi /nologo /W3 /WX- /O1 /GL /D _CRT_SECURE_NO_WARNINGS /D _WIN64
         // /D _WINDLL /D _UNICODE /Gm- /EHsc /MT /GS /fp:precise /Qspectre /Zc:wchar_t /Zc:forScope
         // /Zc:inline /external:W3 /Gd /TC /FC ..\installer.c
-
 
         info!("Building installer_x64...");
 
@@ -606,7 +600,6 @@ impl LibwdiBuild
             .expect("Couldn't write bindings");
     }
 }
-
 
 fn main()
 {
