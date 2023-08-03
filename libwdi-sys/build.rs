@@ -518,6 +518,7 @@ impl LibwdiBuild
         self.apply_common_cc_options(&mut installer, BuildType::Target);
 
         let mut cc_cmd = installer
+            .target("x86_64-pc-windows-msvc")
             .static_crt(true)
             .flag(&format!("/Fe{}", output_path.display()))
             .output_executable();
