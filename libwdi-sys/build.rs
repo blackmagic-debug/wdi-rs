@@ -134,7 +134,7 @@ impl LibwdiBuild
 
     /// A hack to apply necessary linker options if we're compiling with cargo-xwin.
     /// This returns an empty Vec if we're not running under cargo-xwin.
-    fn get_linker_options(&self) -> Vec<String>
+    fn get_linker_options(&self, target_arch: &str) -> Vec<String>
     {
         // cc-rs isn't meant for compiling binaries, and so cargo-xwin doesn't
         // bother letting the linker know where the Windows SDK and MSCRT are.
@@ -172,9 +172,6 @@ impl LibwdiBuild
         };
 
         let xwin_dir = Path::new(&without_imsvc[0..inc_idx]);
-
-        let target_arch = env::var("CARGO_CFG_TARGET_ARCH")
-            .expect("Cargo always sets CARGO_CFG_TARGET_ARCH");
 
         let sdk_lib_dir = xwin_dir.join(&format!("sdk/lib/um/{}", &target_arch));
         let ucrt_lib_dir = xwin_dir.join(&format!("sdk/lib/ucrt/{}", &target_arch));
@@ -472,7 +469,7 @@ impl LibwdiBuild
 
         // HACK: if we're running under cargo-xwin then we need to scrape out its xwin directory
         // and let the linker know where the xwin'd SDK and CRT are.
-        let linker_flags = self.get_linker_options();
+        let linker_flags = self.get_linker_options("x86_64");
 
         let mut installer = cc::Build::new();
         self.apply_common_cc_options(&mut installer, BuildType::Target);
