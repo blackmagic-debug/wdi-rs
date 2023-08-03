@@ -132,6 +132,44 @@ impl LibwdiBuild
         }
     }
 
+    /// A hack to apply necessary compiler options if we're compiling with cargo-xwin.
+    /// This returns an empty Vec if we're not running under cargo-xwin.
+    fn get_compiler_options(&self, target_arch: &str) -> Vec<String>
+    {
+        // cc-rs isn't meant for cross-compiling binaries like this, and so
+        // doesn't bother letting the compiler know where the Windows SDK and
+        // MSCRT are when targeting a different architecture to the intended one.
+        // Let's detect if we're compiling under cargo-xwin, and if so scrape the
+        // locations we need from the variables it does set, then compile a new
+        // set of compiler flags for the intended architecture.
+
+        let mut compile_args: Vec<String> = Vec::new();
+
+        let cflags = match get_cc_var("CFLAGS") {
+            Some(v) => v,
+            None => return compile_args,
+        };
+
+        if !cflags.contains("cargo-xwin") {
+            return compile_args;
+        }
+        let cargo_arch = env::var("CARGO_CFG_TARGET_ARCH")
+            .expect("Cargo always sets CARGO_CFG_TARGET_ARCH");
+
+        if cargo_arch == target_arch {
+            return compile_args;
+        }
+
+        let args: Vec<&str> = cflags.split_whitespace().collect();
+        for include_path in args {
+            if include_path.contains("/imsvc") {
+                compile_args.push(String::from(include_path));
+            }
+        }
+
+        return compile_args;
+    }
+
     /// A hack to apply necessary linker options if we're compiling with cargo-xwin.
     /// This returns an empty Vec if we're not running under cargo-xwin.
     fn get_linker_options(&self, target_arch: &str) -> Vec<String>
@@ -469,6 +507,7 @@ impl LibwdiBuild
 
         // HACK: if we're running under cargo-xwin then we need to scrape out its xwin directory
         // and let the linker know where the xwin'd SDK and CRT are.
+        let compile_args = self.get_compiler_options("x86_64");
         let linker_flags = self.get_linker_options("x86_64");
 
         let mut installer = cc::Build::new();
@@ -480,6 +519,7 @@ impl LibwdiBuild
             .output_executable();
 
         cc_cmd
+            .args(&compile_args)
             // See [PathToArg] for why the .to_arg() is here.
             .arg(self.libwdi_src.join("libwdi/installer.c").to_arg())
             // Add the WinAPI libraries we need to link against.
