@@ -272,6 +272,10 @@ impl LibwdiBuild
             // or libusbK to disable them, so let's disable them with a patch.
             // FIXME: This should probably be configurable through feature flags.
             (Path::new("msvc/config.h"), Path::new("winusb_only.patch")),
+
+            // libwdi's installer makes a mess of some types that makes ARM compilation
+            // angry, so fix the type mistakes with a patch.
+            (Path::new("libwdi/installer.c"), Path::new("installer_types_mismatches.patch")),
         ];
 
         // The source files that we'll copy as-is.
