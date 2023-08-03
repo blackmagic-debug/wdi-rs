@@ -164,9 +164,9 @@ impl LibwdiBuild
         }
 
         let args: Vec<&str> = cflags.split_whitespace().collect();
-        for include_path in args {
-            if include_path.contains("/imsvc") {
-                compile_args.push(String::from(include_path));
+        for flag in args {
+            if flag.starts_with("/imsvc") || flag.starts_with("-fuse-ld") {
+                compile_args.push(String::from(flag))
             }
         }
 
@@ -196,7 +196,7 @@ impl LibwdiBuild
         let args: Vec<&str> = cflags.split_whitespace().collect();
         let crt_include_arg = args
             .iter()
-            .find(|arg| arg.contains("/imsvc") && arg.contains("crt/include"));
+            .find(|arg| arg.starts_with("/imsvc") && arg.contains("crt/include"));
 
         let crt_include_arg = match crt_include_arg {
             Some(v) => *v,
@@ -548,6 +548,67 @@ impl LibwdiBuild
         }
     }
 
+    /// Builds the `installer_arm64.exe` binary which gets embedded into a C header for the
+    /// rest of the library.
+    ///
+    /// Like [make_embedder], this function also contains hacks to use [cc] to compile an
+    /// executable instead of a library.
+    fn make_installer_arm64(&self)
+    {
+        // The equivalent msbuild command to build this manually:
+        // $MSBUILD libwdi/.msvc/installer_arm64.vcxproj -p:PlatformToolset=143
+        // -p:PerferredToolArchitecture=ARM64 -p:Platform=ARM64 -p:Configuration=Release
+
+        // Which runs roughly this command:
+        // cl.exe /c /I..\..\msvc /Zi /nologo /W3 /WX- /O1 /GL /D _CRT_SECURE_NO_WARNINGS /D _WIN64
+        // /D _WINDLL /D _UNICODE /Gm- /EHsc /MT /GS /fp:precise /Qspectre /Zc:wchar_t /Zc:forScope
+        // /Zc:inline /external:W3 /Gd /TC /FC ..\installer.c
+
+        info!("Building installer_arm64...");
+
+        let output_path = self.out_dir.join("installer_arm64.exe");
+
+        // HACK: if we're running under cargo-xwin then we need to scrape out its xwin directory
+        // and let the compiler linker know where the xwin'd SDK and CRT are.
+        let compile_args = self.get_compiler_options("aarch64");
+        let linker_flags = self.get_linker_options("aarch64");
+
+        let mut installer = cc::Build::new();
+        self.apply_common_cc_options(&mut installer, BuildType::Target);
+
+        let mut cc_cmd = installer
+            .target("aarch64-pc-windows-msvc")
+            .static_crt(true)
+            .flag(&format!("/Fe{}", output_path.display()))
+            .output_executable();
+
+        cc_cmd
+            .args(&compile_args)
+            // See [PathToArg] for why the .to_arg() is here.
+            .arg(self.libwdi_src.join("libwdi/installer.c").to_arg())
+            // Add the WinAPI libraries we need to link against.
+            .args(&[
+                "/link",
+                "newdev.lib",
+                "setupapi.lib",
+                "user32.lib",
+                "ole32.lib",
+                "advapi32.lib",
+            ])
+            .args(&linker_flags);
+
+        info!("{:?}", cc_cmd);
+
+        let success = cc_cmd
+            .current_dir(&self.out_dir)
+            .status()
+            .unwrap()
+            .success();
+        if !success {
+            panic!("Compiler returned non-zero exit code");
+        }
+    }
+
     /// Runs the host embedder executable built in [make_embedder]. See that function for more
     /// details.
     fn run_embedder(&self)
@@ -652,6 +713,7 @@ fn main()
     build.populate_source_tree();
     build.make_embedder();
     build.make_installer_x86_64();
+    build.make_installer_arm64();
     build.run_embedder();
     build.make_lib();
 
