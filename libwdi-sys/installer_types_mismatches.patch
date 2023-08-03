@@ -1,0 +1,48 @@
+diff --git a/libwdi/installer.c b/libwdi/installer.c
+--- a/libwdi/installer.c
++++ b/libwdi/installer.c
+@@ -690,7 +690,7 @@ BOOL disable_system_restore(BOOL enabled)
+ 	DWORD disp, regtype, val, val_size=sizeof(DWORD);
+ 	HRESULT hr;
+ 	IGroupPolicyObject* pLGPO = NULL;
+-	static DWORD original_val = -1;		// -1 = key doesn't exist
++	static DWORD original_val = (DWORD)-1; // -1 = key doesn't exist
+ 	HKEY machine_key = NULL, disable_system_restore_key = NULL;
+ 	// MSVC is finicky about these ones => redefine them
+ 	const IID my_IID_IGroupPolicyObject =
+@@ -737,7 +737,7 @@
+ 		goto error;
+ 	}
+ 
+-	if ((disp == REG_OPENED_EXISTING_KEY) && (enabled) && (original_val == -1)) {
++	if (disp == REG_OPENED_EXISTING_KEY && enabled && original_val == (DWORD)-1) {
+ 		// backup existing value for restore
+ 		regtype = REG_DWORD;
+ 		r = RegQueryValueExA(disable_system_restore_key, "DisableSystemRestore", NULL, &regtype, (LPBYTE)&original_val, &val_size);
+@@ -749,7 +749,7 @@
+ 		}
+ 	}
+ 
+-	if ((enabled) || (original_val != -1)) {
++	if (enabled || original_val != (DWORD)-1) {
+ 		val = (enabled)?1:original_val;
+ 		r = RegSetValueExA(disable_system_restore_key, "DisableSystemRestore", 0, REG_DWORD, (BYTE*)&val, sizeof(val));
+ 	} else {
+@@ -796,7 +796,7 @@ int __cdecl main(int argc_ansi, char** argv_ansi)
+ 	char* inf_name = NULL;
+ 	char path[MAX_PATH_LENGTH];
+ 	char destname[MAX_PATH_LENGTH];
+-	uintptr_t syslog_reader_thid = -1L;
++	uintptr_t syslog_reader_thid = (uintptr_t)-1;
+ 
+ 	// Connect to the messaging pipe
+ 	pipe_handle = CreateFileA(INSTALLER_PIPE_NAME, GENERIC_READ|GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+@@ -858,7 +858,7 @@
+ 	syslog_ready_event = CreateEvent(NULL, TRUE, FALSE, NULL);
+ 	syslog_terminate_event = CreateEvent(NULL, TRUE, FALSE, NULL);
+ 	syslog_reader_thid = _beginthread(syslog_reader_thread, 0, 0);
+-	if ( (syslog_reader_thid == -1L)
++	if (syslog_reader_thid == (uintptr_t)-1
+ 	  || (WaitForSingleObject(syslog_ready_event, 2000) != WAIT_OBJECT_0) )	{
+ 		plog("Unable to create syslog reader thread");
+ 		SetEvent(syslog_terminate_event);
