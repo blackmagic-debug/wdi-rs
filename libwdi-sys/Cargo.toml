@@ -2,7 +2,7 @@
 name = "libwdi-sys"
 description = "FFI bindings for libwdi."
 version = "0.1.0"
-license = "MIT or Apache-2.0"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/blackmagic-debug/wdi-rs"
 edition = "2021"
 links = "wdi"
