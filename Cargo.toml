@@ -11,6 +11,6 @@ default-target = "x86_64-pc-windows-msvc"
 targets = []
 
 [dependencies]
-libwdi-sys = { path = "libwdi-sys", version = "0.1.0" }
+libwdi-sys = { path = "libwdi-sys", version = "0.1.1" }
 winapi = { version = "0.3.9", features = ["setupapi"] }
 bstr = "1.6.0"
