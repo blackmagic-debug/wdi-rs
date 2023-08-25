@@ -257,12 +257,6 @@ impl LibwdiBuild
         // The source files that we'll copy, but need to be patched first, and their patch files.
         // Source files relative from libwdi_repo; patch files relative from current directory.
         let needs_patch = &[
-
-            // libwdi defines `char *wdi_windows_error_str()` which does not seem
-            // to be intended to be a public funtion. Change it to
-            // `static char *wdi_windows_error_str()`.
-            (Path::new("libwdi/libwdi.c"), Path::new("static_windows_error_str.patch")),
-
             // libwdi's embedder host program hardcodes the path to installer_x64.exe based on
             // Visual Studio's default directory structure (e.g. `x64/Release/helper`).
             // We're not using that, so let's patch that path.
@@ -281,13 +275,13 @@ impl LibwdiBuild
         // The source files that we'll copy as-is.
         // Again relative from libwdi_repo (after that .map() below, at least).
         let mut as_is: Vec<PathBuf> = [
+            "libwdi.c",
             "libwdi_dlg.c",
             "logging.c",
             "pki.c",
             "tokenizer.c",
             "vid_data.c",
             "embedder.c",
-            "installer.c",
             "libwdi.h",
             "libwdi_i.h",
             "tokenizer.h",
