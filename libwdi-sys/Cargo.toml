@@ -15,6 +15,7 @@ targets = []
 [features]
 # Run bindgen at build time instead of using the already-generated bindings. Requires libclang on the system.
 dynamic-bindgen = []
+make-installer-arm64 = []
 
 [build-dependencies]
 bindgen = "0.66.1"
