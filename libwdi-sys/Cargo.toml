@@ -15,7 +15,10 @@ targets = []
 [features]
 # Run bindgen at build time instead of using the already-generated bindings. Requires libclang on the system.
 dynamic-bindgen = []
+# Disable ARM64 target compilation
 disable-arm64 = []
+# Disable x86 (32-bit) target compilation
+disable-x86 = []
 
 [build-dependencies]
 bindgen = "0.66.1"
