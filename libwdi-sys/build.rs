@@ -712,7 +712,9 @@ fn main()
     build.populate_source_tree();
     build.make_embedder();
     build.make_installer_x86_64();
-    build.make_installer_arm64();
+    if cfg!(feature = "make-installer-arm64") {
+        build.make_installer_arm64();
+    }
     build.run_embedder();
     build.make_lib();
 
