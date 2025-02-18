@@ -341,6 +341,14 @@ impl LibwdiBuild
             self.apply_patch_file(src_file, patch_file);
         }
 
+        // Disable target support if flag set
+        if cfg!(feature = "disable-x86") {
+            self.replace_in_file(Path::new("msvc/config.h"), "#define OPT_M32", "//#define OPT_M32");
+        }
+        if cfg!(feature = "disable-arm64") {
+            self.replace_in_file(Path::new("msvc/config.h"), "#define OPT_ARM", "//#define OPT_ARM");
+        }
+
         // Minor hack: when cross compiling, the host needs a config.h, but needs to NOT have the
         // msvc headers in the include path. Let's create a special directory for that.
         if cfg!(not(windows)) {
@@ -413,6 +421,18 @@ impl LibwdiBuild
         // Finally, write the patched text to the target source tree (in OUT_DIR).
         fs::write(&target_path, &patched_text)
             .expect(&format!("Error writing patched source file {}", target_path.display()));
+    }
+
+    fn replace_in_file<TargetP>(&self, target_file: TargetP, target_str: &str, replacement: &str)
+    where
+        TargetP: AsRef<Path>
+    {
+        let target_path = self.libwdi_src.join(target_file);
+        let content = fs::read_to_string(&target_path)
+            .expect(&format!("Error reading source file for replace {}", target_path.display()));
+        let new_content = content.replace(target_str, replacement);
+        fs::write(&target_path, new_content)
+            .expect(&format!("Error writing source file for replace {}", target_path.display()));
     }
 
     /// Compiles the embedder host binary that is needed to compile libwdi.
@@ -712,7 +732,7 @@ fn main()
     build.populate_source_tree();
     build.make_embedder();
     build.make_installer_x86_64();
-    if !cfg!(feature = "disable-arm64") {
+    if !(cfg!(feature = "disable-arm64")) {
         build.make_installer_arm64();
     }
     build.run_embedder();
