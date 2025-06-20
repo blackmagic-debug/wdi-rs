@@ -341,11 +341,11 @@ impl LibwdiBuild
             self.apply_patch_file(src_file, patch_file);
         }
 
-        // Disable target support if flag set
-        if cfg!(feature = "disable-x86") {
+        // Disable target support if flag is not set
+        if cfg!(not(feature = "enable-x86")) {
             self.replace_in_file(Path::new("msvc/config.h"), "#define OPT_M32", "//#define OPT_M32");
         }
-        if cfg!(feature = "disable-arm64") {
+        if cfg!(not(feature = "enable-arm64")) {
             self.replace_in_file(Path::new("msvc/config.h"), "#define OPT_ARM", "//#define OPT_ARM");
         }
 
@@ -731,8 +731,10 @@ fn main()
     let build = LibwdiBuild::new();
     build.populate_source_tree();
     build.make_embedder();
-    build.make_installer_x86_64();
-    if !(cfg!(feature = "disable-arm64")) {
+    if cfg!(feature = "enable-x86") {
+        build.make_installer_x86_64();
+    }
+    if cfg!(feature = "enable-arm64") {
         build.make_installer_arm64();
     }
     build.run_embedder();
