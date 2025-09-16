@@ -263,9 +263,9 @@ impl LibwdiBuild
             (Path::new("libwdi/embedder.h"), Path::new("installer_path.patch")),
 
             // libwdi doesn't let you simply not define driver file locations for libusb-win32
-            // or libusbK to disable them, so let's disable them with a patch.
-            // FIXME: This should probably be configurable through feature flags.
-            (Path::new("msvc/config.h"), Path::new("winusb_only.patch")),
+            // or libusbK to disable them, so let's cut default paths with a patch.
+            // We still can enable them later by defining LIBUSB0_DIR or LIBUSBK_DIR
+            (Path::new("msvc/config.h"), Path::new("no_default_paths.patch")),
 
             // libwdi's installer makes a mess of some types that makes ARM compilation
             // angry, so fix the type mistakes with a patch.
@@ -462,6 +462,27 @@ impl LibwdiBuild
             embedder.define("WDK_DIR", Some(format!(r#""{}""#, val).as_str()));
         }
         println!("cargo:rerun-if-env-changed=WDK_DIR");
+
+        // If we're compiling with libusb0, let the embedder know where it is.
+        if cfg!(feature = "libusb0") {
+            if let Ok(val) = env::var("LIBUSB0_DIR") {
+                embedder.define("LIBUSB0_DIR", Some(format!(r#""{}""#, val).as_str()));
+            } else {
+                error!("LIBUSB0_DIR environment variable required when compiling with libusb0");
+                panic!("LIBUSB0_DIR environment variable required when compiling with libusb0");
+            }
+            println!("cargo:rerun-if-env-changed=LIBUSB0_DIR");
+        }
+        // Ditto for libusbk
+        if cfg!(feature = "libusbk") {
+            if let Ok(val) = env::var("LIBUSBK_DIR") {
+                embedder.define("LIBUSBK_DIR", Some(format!(r#""{}""#, val).as_str()));
+            } else {
+                error!("LIBUSBK_DIR environment variable required when compiling with libusbk");
+                panic!("LIBUSBK_DIR environment variable required when compiling with libusbk");
+            }
+            println!("cargo:rerun-if-env-changed=LIBUSBK_DIR");
+        }
 
         // If we're cross compiling...
         if !cfg!(windows) {

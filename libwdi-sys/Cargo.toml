@@ -20,6 +20,10 @@ dynamic-bindgen = []
 enable-arm64 = []
 # Enable x86 (32-bit) target compilation
 enable-x86 = []
+# Enable libusb0 (libusb-win32) support
+libusb0 = []
+# Enable libusbK support
+libusbk = []
 
 [build-dependencies]
 bindgen = "0.66.1"
