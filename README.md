@@ -11,3 +11,8 @@ works as seamlessly as possible. It will, however, require an existing Windows t
 
 The only other requirement is the [Windows 8.0 Driver Kit redistributable components](https://go.microsoft.com/fwlink/p/?LinkID=253170),
 with the environment variable `WDK_DIR` set to the path it's been extracted to, e.g. `export WDK_DIR=/opt/wdk/8.0`.
+
+## libusb-win32 and libusbK support
+
+By default, the library provides WinUSB support only. Two other drivers are supported by `libusb0` and `libusbk` features.
+The only requirement is to provide driver paths through environment variables (respectively, `LIBUSB0_DIR` and `LIBUSBK_DIR`).
