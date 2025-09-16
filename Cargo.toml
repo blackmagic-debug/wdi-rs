@@ -11,6 +11,19 @@ default-target = "x86_64-pc-windows-msvc"
 targets = []
 
 [dependencies]
-libwdi-sys = { path = "libwdi-sys", version = "0.1.1" }
+libwdi-sys = { path = "libwdi-sys", version = "0.1.1", features = [] }
 winapi = { version = "0.3.9", features = ["setupapi"] }
 bstr = "1.6.0"
+
+[features]
+default = ["enable-x86", "enable-arm64"]
+# Run bindgen at build time instead of using the already-generated bindings. Requires libclang on the system.
+dynamic-bindgen = ["libwdi-sys/dynamic-bindgen"]
+# Enable ARM64 target compilation
+enable-arm64 = ["libwdi-sys/enable-arm64"]
+# Enable x86 (32-bit) target compilation
+enable-x86 = ["libwdi-sys/enable-x86"]
+# Enable libusb0 (libusb-win32) support
+libusb0 = ["libwdi-sys/libusb0"]
+# Enable libusbK support
+libusbk = ["libwdi-sys/libusbk"]
