@@ -693,6 +693,23 @@ impl LibwdiBuild
 
         let mut lib = cc::Build::new();
         self.apply_common_cc_options(&mut lib, BuildType::Target);
+
+        // If we're compiling with libusb0, provide the header,
+        // so the library recognizes its existence.
+        if cfg!(feature = "libusb0") {
+            if let Ok(val) = env::var("LIBUSB0_DIR") {
+                lib.define("LIBUSB0_DIR", Some(format!(r#""{}""#, val).as_str()));
+            } 
+            // Everything else is handled by make_embedder
+        }
+        // Ditto for libusbk
+        if cfg!(feature = "libusbk") {
+            if let Ok(val) = env::var("LIBUSBK_DIR") {
+                lib.define("LIBUSBK_DIR", Some(format!(r#""{}""#, val).as_str()));
+            } 
+            // Everything else is handled by make_embedder
+        }
+
         lib
             .files(&lib_srcs)
             .compile("wdi");
