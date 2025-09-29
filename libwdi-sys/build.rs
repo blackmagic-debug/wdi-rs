@@ -718,16 +718,30 @@ impl LibwdiBuild
         // If we're compiling with libusb0, provide the header,
         // so the library recognizes its existence.
         if cfg!(feature = "libusb0") {
-            if let Ok(val) = env::var("LIBUSB0_DIR") {
-                lib.define("LIBUSB0_DIR", Some(format!(r#""{}""#, val).as_str()));
-            } 
+            if let Ok(path) = env::var("LIBUSB0_DIR") {
+                // Handle Windows path separators - all single \ need to become \\ for the C(++)
+                // compiler to not eat itself for breakfast, lunch and dinner with escape sequences
+                let path = path
+                    .split("\\")
+                    .map(String::from)
+                    .reduce(|base, piece| format!("{}\\\\{}", base, piece))
+                    .unwrap();
+                lib.define("LIBUSB0_DIR", Some(format!(r#""{}""#, path).as_str()));
+            }
             // Everything else is handled by make_embedder
         }
         // Ditto for libusbk
         if cfg!(feature = "libusbk") {
-            if let Ok(val) = env::var("LIBUSBK_DIR") {
-                lib.define("LIBUSBK_DIR", Some(format!(r#""{}""#, val).as_str()));
-            } 
+            if let Ok(path) = env::var("LIBUSBK_DIR") {
+                // Handle Windows path separators - all single \ need to become \\ for the C(++)
+                // compiler to not eat itself for breakfast, lunch and dinner with escape sequences
+                let path = path
+                    .split("\\")
+                    .map(String::from)
+                    .reduce(|base, piece| format!("{}\\\\{}", base, piece))
+                    .unwrap();
+                lib.define("LIBUSBK_DIR", Some(format!(r#""{}""#, path).as_str()));
+            }
             // Everything else is handled by make_embedder
         }
 
