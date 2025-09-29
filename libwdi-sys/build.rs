@@ -458,15 +458,29 @@ impl LibwdiBuild
 
         // Allow the user to specify WDK_DIR environment variable to override the default WDK
         // directory. This becomes necessary when cross compiling.
-        if let Ok(val) = env::var("WDK_DIR") {
-            embedder.define("WDK_DIR", Some(format!(r#""{}""#, val).as_str()));
+        if let Ok(path) = env::var("WDK_DIR") {
+            // Handle Windows path separators - all single \ need to become \\ for the C(++)
+            // compiler to not eat itself for breakfast, lunch and dinner with escape sequences
+            let path = path
+                .split("\\")
+                .map(String::from)
+                .reduce(|base, piece| format!("{}\\\\{}", base, piece))
+                .unwrap();
+            embedder.define("WDK_DIR", Some(format!(r#""{}""#, path).as_str()));
         }
         println!("cargo:rerun-if-env-changed=WDK_DIR");
 
         // If we're compiling with libusb0, let the embedder know where it is.
         if cfg!(feature = "libusb0") {
-            if let Ok(val) = env::var("LIBUSB0_DIR") {
-                embedder.define("LIBUSB0_DIR", Some(format!(r#""{}""#, val).as_str()));
+            if let Ok(path) = env::var("LIBUSB0_DIR") {
+                // Handle Windows path separators - all single \ need to become \\ for the C(++)
+                // compiler to not eat itself for breakfast, lunch and dinner with escape sequences
+                let path = path
+                    .split("\\")
+                    .map(String::from)
+                    .reduce(|base, piece| format!("{}\\\\{}", base, piece))
+                    .unwrap();
+                embedder.define("LIBUSB0_DIR", Some(format!(r#""{}""#, path).as_str()));
             } else {
                 error!("LIBUSB0_DIR environment variable required when compiling with libusb0");
                 panic!("LIBUSB0_DIR environment variable required when compiling with libusb0");
@@ -475,8 +489,15 @@ impl LibwdiBuild
         }
         // Ditto for libusbk
         if cfg!(feature = "libusbk") {
-            if let Ok(val) = env::var("LIBUSBK_DIR") {
-                embedder.define("LIBUSBK_DIR", Some(format!(r#""{}""#, val).as_str()));
+            if let Ok(path) = env::var("LIBUSBK_DIR") {
+                // Handle Windows path separators - all single \ need to become \\ for the C(++)
+                // compiler to not eat itself for breakfast, lunch and dinner with escape sequences
+                let path = path
+                    .split("\\")
+                    .map(String::from)
+                    .reduce(|base, piece| format!("{}\\\\{}", base, piece))
+                    .unwrap();
+                embedder.define("LIBUSBK_DIR", Some(format!(r#""{}""#, path).as_str()));
             } else {
                 error!("LIBUSBK_DIR environment variable required when compiling with libusbk");
                 panic!("LIBUSBK_DIR environment variable required when compiling with libusbk");
