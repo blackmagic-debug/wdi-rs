@@ -781,7 +781,7 @@ impl LibwdiBuild
         let bindings = bindgen::Builder::default()
             .header("wrapper.h")
             .parse_callbacks(Box::new(bindgen::CargoCallbacks))
-            //.clang_arg("-Ilibwdi/libwdi")
+            .clang_arg(format!("-I{}", self.libwdi_src.join("libwdi").to_str().unwrap()))
             .allowlist_function("wdi_.*")
             .allowlist_var("wdi_.*")
             .allowlist_type("wdi_.*")
