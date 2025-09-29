@@ -63,6 +63,14 @@ jobs:
           mv libusb-win32-bin-1.4.0.1 libusb-win32
           echo "LIBUSB0_DIR=${{ runner.temp }}\\libusb-win32" >> $GITHUB_ENV
         working-directory: ${{ runner.temp }}
+      - name: Setup libusbK driver dependency
+        shell: bash
+        run: |
+          curl -Lo libusbK.7z https://github.com/mcuee/libusbk/releases/download/V3.1.0.0/libusbK-3.1.0.0-bin.7z
+          7z x libusbK.7z
+          mv libusbK-3.1.0.0-bin libusbK
+          echo "LIBUSBK_DIR=${{ runner.temp }}\\libusbK\\bin" >> $GITHUB_ENV
+        working-directory: ${{ runner.temp }}
       - name: Build
         run: cargo b
       - name: Test
