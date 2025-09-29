@@ -87,13 +87,13 @@ fn get_cc_var(var_base: &str) -> Option<String>
     }
 }
 
-
 /// Turns a [cc::Build] into a [Command] that can be used to create an executable,
 /// since cc-rs doesn't directly support compiling executables.
 trait CcOutputExecutable
 {
     fn output_executable(&self) -> Command;
 }
+
 impl CcOutputExecutable for cc::Build
 {
     fn output_executable(&self) -> Command
@@ -745,9 +745,11 @@ impl LibwdiBuild
             // Everything else is handled by make_embedder
         }
 
-        lib
-            .files(&lib_srcs)
-            .compile("wdi");
+        // Tell the builder about all the input files that are needed
+        lib.files(&lib_srcs);
+        // Display a diagnostic on what we're about to do and run the build
+        info!("{:?}", lib.output_executable().args(&lib_srcs));
+        lib.compile("wdi");
 
         println!("cargo:include={}", self.libwdi_src.join("libwdi").to_str().unwrap());
         println!("cargo:rustc-link-lib=shell32");
