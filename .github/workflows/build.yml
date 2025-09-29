@@ -35,7 +35,7 @@ jobs:
         run: |
           Invoke-WebRequest https://go.microsoft.com/fwlink/p/?LinkID=253170 -OutFile wdk-redist.msi
           Start-Process -FilePath msiexec -Verb Runas -Wait -ArgumentList "/i","$PWD\wdk-redist.msi","/passive","/qn","LicenseAccepted=1"
-          rm wdk-redist.msi
+        working-directory: ${{ runner.temp }}
       - name: Checkout wdi-rs
         uses: actions/checkout@v5
         with:
@@ -55,6 +55,14 @@ jobs:
           cargo --version
           rustc --version
           cargo llvm-cov --version
+      - name: Setup libusb0 driver dependency
+        shell: bash
+        run: |
+          curl -Lo libusb-win32.zip https://github.com/mcuee/libusb-win32/releases/download/snapshot_1.4.0.1/libusb-win32-bin-1.4.0.1.zip
+          unzip libusb-win32.zip
+          mv libusb-win32-bin-1.4.0.1 libusb-win32
+          echo "LIBUSB0_DIR=${{ runner.temp }}\\libusb-win32" >> $GITHUB_ENV
+        working-directory: ${{ runner.temp }}
       - name: Build
         run: cargo b
       - name: Test
