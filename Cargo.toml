@@ -1,7 +1,7 @@
 [package]
 name = "wdi"
 description = "Rust library for interacting with the Windows Driver Installer subsystem."
-version = "0.1.1"
+version = "0.1.3"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/blackmagic-debug/wdi-rs"
 edition = "2021"
@@ -11,7 +11,7 @@ default-target = "x86_64-pc-windows-msvc"
 targets = []
 
 [dependencies]
-libwdi-sys = { path = "libwdi-sys", version = "0.1.1", features = [] }
+libwdi-sys = { path = "libwdi-sys", version = "0.1.3", features = [] }
 winapi = { version = "0.3.9", features = ["setupapi"] }
 bstr = "1.6.0"
 
