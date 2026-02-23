@@ -1,3 +1,0 @@
-[submodule "libwdi-sys/libwdi"]
-	path = libwdi-sys/libwdi
-	url = https://github.com/pbatard/libwdi
